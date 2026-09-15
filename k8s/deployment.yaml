@@ -1,0 +1,60 @@
+---
+# Deployment — manages the desired state: 3 replicas of payment-service.
+# Rolling updates replace pods one-at-a-time so traffic is never fully dropped.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service
+  labels:
+    app: payment-service
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: payment-service
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1 # allow 1 extra pod during update
+      maxUnavailable: 1 # allow 1 pod to be down during update
+  template:
+    metadata:
+      labels:
+        app: payment-service
+    spec:
+      containers:
+        - name: payment-service
+          image: payment-service:v1
+          imagePullPolicy: Never # use the locally-built minikube image
+          ports:
+            - containerPort: 5000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+---
+# Service — stable DNS name + load-balancer in front of the pods.
+# NodePort exposes the service on a high port on the minikube node so we can
+# reach it from the host machine with `minikube service payment-service --url`.
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-service
+spec:
+  type: NodePort
+  selector:
+    app: payment-service
+  ports:
+    - name: http
+      port: 80 # cluster-internal port
+      targetPort: 5000 # pod container port
+      protocol: TCP
